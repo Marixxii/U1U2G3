@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pronunciation City Drive</title>
+    <style>
+        :root {
+            --city-color: #4facfe;
+            --road-color: #333;
+            --accent: #f093fb;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #a1c4fd;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- Game World --- */
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 400px;
+            background: linear-gradient(to bottom, #87CEEB 0%, #e1eec3 100%);
+            border-bottom: 10px solid #555;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .city-bg {
+            position: absolute;
+            bottom: 40px;
+            width: 200%;
+            height: 150px;
+            background: repeating-linear-gradient(90deg, #6c5ce7 0px, #6c5ce7 40px, #a29bfe 40px, #a29bfe 80px);
+            opacity: 0.3;
+            animation: moveCity 20s linear infinite;
+        }
+
+        @keyframes moveCity {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+
+        #road {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 60px;
+            background: var(--road-color);
+            display: flex;
+            align-items: center;
+        }
+
+        #car {
+            position: absolute;
+            bottom: 20px;
+            left: 50px;
+            font-size: 40px;
+            transition: all 0.5s ease;
+            z-index: 10;
+        }
+
+        .car-drive { animation: shake 0.2s infinite; }
+        .car-crash { animation: crash 0.5s forwards; }
+        
+        @keyframes shake {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+            100% { transform: translateY(0); }
+        }
+
+        @keyframes crash {
+            0% { transform: rotate(0) scale(1); }
+            50% { transform: rotate(-20deg) scale(1.2); }
+            100% { transform: rotate(-90deg) translateY(20px); filter: grayscale(1); }
+        }
+
+        #obstacle {
+            position: absolute;
+            bottom: 40px;
+            right: 150px;
+            font-size: 50px;
+            transition: opacity 0.3s;
+        }
+
+        /* --- UI Elements --- */
+        #ui-panel {
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
+            text-align: center;
+            background: white;
+            box-sizing: border-box;
+        }
+
+        #sentence-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2d3436;
+            margin-bottom: 15px;
+            min-height: 1.2em;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        #progress-container {
+            width: 100%;
+            height: 15px;
+            background: #eee;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #00f2fe, #4facfe);
+            transition: width 0.3s;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            margin: 5px;
+            color: white;
+        }
+
+        #mic-btn { background: #ff4757; }
+        #mic-btn.active { background: #2ed573; transform: scale(1.1); box-shadow: 0 0 15px #2ed573; }
+        #next-btn { background: #1e90ff; display: none; }
+        #retry-btn { background: #ffa502; display: none; }
+
+        #feedback {
+            margin-top: 15px;
+            font-weight: bold;
+            height: 20px;
+        }
+
+        .success-msg { color: #2ecc71; }
+        .error-msg { color: #e74c3c; }
+
+        #final-screen {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.95);
+            z-index: 100;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="city-bg"></div>
+        <div id="obstacle">🚧</div>
+        <div id="car" class="car-drive">🚗</div>
+        <div id="road"></div>
+        
+        <div id="final-screen">
+            <h1>🏆 Game Complete!</h1>
+            <p id="final-score-text"></p>
+            <button class="btn" style="background:#2ecc71" onclick="location.reload()">Play Again</button>
+        </div>
+    </div>
+
+    <div id="ui-panel">
+        <div class="stats">
+            <span id="level-text">Level 1 / 10</span>
+            <span id="score-text">Score: 0</span>
+        </div>
+        
+        <div id="progress-container">
+            <div id="progress-bar"></div>
+        </div>
+
+        <div id="sentence-display">Get Ready!</div>
+        
+        <div id="controls">
+            <button id="mic-btn" class="btn">🎤 Hold to Speak</button>
+            <button id="next-btn" class="btn">Next Level ➔</button>
+            <button id="retry-btn" class="btn">Try Again ↻</button>
+        </div>
+
+        <div id="feedback"></div>
+    </div>
+
+    <script>
+        const sentences = [
+            "I can sing.", "I can dance.", "I can draw.", 
+            "I can fly a kite.", "I can ride a bike.", "Yes, I can ride a bike.",
+            "No, I can't fly a kite.", "I can swim.", "I can't swim.", "Can you sing?"
+        ];
+
+        let currentLevel = 0;
+        let score = 0;
+        let startTime;
+        let isListening = false;
+
+        // Elements
+        const car = document.getElementById('car');
+        const obstacle = document.getElementById('obstacle');
+        const sentenceDisplay = document.getElementById('sentence-display');
+        const micBtn = document.getElementById('mic-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const retryBtn = document.getElementById('retry-btn');
+        const feedback = document.getElementById('feedback');
+        const scoreText = document.getElementById('score-text');
+        const levelText = document.getElementById('level-text');
+        const progressBar = document.getElementById('progress-bar');
+
+        // Speech Recognition Setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        function initLevel() {
+            sentenceDisplay.innerText = sentences[currentLevel];
+            levelText.innerText = `Level ${currentLevel + 1} / ${sentences.length}`;
+            progressBar.style.width = `${(currentLevel / sentences.length) * 100}%`;
+            
+            // Reset visuals
+            car.className = 'car-drive';
+            car.style.left = '50px';
+            obstacle.style.opacity = '1';
+            nextBtn.style.display = 'none';
+            retryBtn.style.display = 'none';
+            micBtn.style.display = 'inline-block';
+            feedback.innerText = '';
+        }
+
+        // Web Audio API for noise reduction simulation & constraints
+        async function getMicStream() {
+            try {
+                return await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        noiseSuppression: true,
+                        echoCancellation: true,
+                        autoGainControl: true
+                    }
+                });
+            } catch (err) {
+                console.error("Mic access denied", err);
+            }
+        }
+
+        // Handle Speech logic
+        micBtn.onmousedown = micBtn.ontouchstart = () => {
+            isListening = true;
+            startTime = Date.now();
+            micBtn.classList.add('active');
+            micBtn.innerText = "Listening...";
+            recognition.start();
+        };
+
+        micBtn.onmouseup = micBtn.ontouchend = () => {
+            if(!isListening) return;
+            recognition.stop();
+            micBtn.classList.remove('active');
+            micBtn.innerText = "🎤 Hold to Speak";
+            isListening = false;
+        };
+
+        recognition.onresult = (event) => {
+            const duration = (Date.now() - startTime) / 1000;
+            const transcript = event.results[0][0].transcript.toLowerCase().replace(/[.,?!]/g, "");
+            const target = sentences[currentLevel].toLowerCase().replace(/[.,?!]/g, "");
+
+            // Noise Reduction Handling
+            if (duration < 2) {
+                showFeedback("Please speak clearly and try again.", "error-msg");
+                return;
+            }
+
+            // Simple Similarity Check (Fuzzy match)
+            if (isSimilar(transcript, target)) {
+                handleSuccess();
+            } else {
+                handleFailure();
+            }
+        };
+
+        function isSimilar(s1, s2) {
+            // Check if major words exist (basic 80% tolerance)
+            const words1 = s1.split(" ");
+            const words2 = s2.split(" ");
+            let matches = 0;
+            words2.forEach(word => {
+                if(words1.includes(word)) matches++;
+            });
+            return (matches / words2.length) >= 0.75;
+        }
+
+        function handleSuccess() {
+            score += 10;
+            scoreText.innerText = `Score: ${score}`;
+            showFeedback("Correct! +10 points", "success-msg");
+            
+            // Animation: Car passes obstacle
+            car.style.left = '600px';
+            obstacle.style.opacity = '0';
+            
+            micBtn.style.display = 'none';
+            nextBtn.style.display = 'inline-block';
+            
+            // Play success sound (Simulated)
+            playTone(440, 0.2); 
+        }
+
+        function handleFailure() {
+            showFeedback("Try again", "error-msg");
+            car.className = 'car-crash';
+            micBtn.style.display = 'none';
+            retryBtn.style.display = 'inline-block';
+            
+            // Play crash sound (Simulated)
+            playTone(150, 0.5);
+        }
+
+        function showFeedback(text, className) {
+            feedback.innerText = text;
+            feedback.className = className;
+        }
+
+        nextBtn.onclick = () => {
+            currentLevel++;
+            if (currentLevel < sentences.length) {
+                initLevel();
+            } else {
+                showFinalScreen();
+            }
+        };
+
+        retryBtn.onclick = () => {
+            initLevel();
+        };
+
+        function showFinalScreen() {
+            document.getElementById('final-screen').style.display = 'flex';
+            document.getElementById('final-score-text').innerText = `Final Score: ${score}`;
+            progressBar.style.width = '100%';
+        }
+
+        // Simple Audio Generator (No external files needed)
+        function playTone(freq, dur) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+            osc.start();
+            osc.stop(ctx.currentTime + dur);
+        }
+
+        // Start Game
+        getMicStream();
+        initLevel();
+    </script>
+</body>
+</html>
